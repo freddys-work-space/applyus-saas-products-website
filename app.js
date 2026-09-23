@@ -341,6 +341,337 @@ document.addEventListener('DOMContentLoaded', () => {
     startAutoPlay();
   }
 
+  // 8.8 Section 8.8: Live Websites & Production Hyperlinks Directory (Neon PostgreSQL Powered)
+  initLiveWebsitesDirectory();
+
+  async function initLiveWebsitesDirectory() {
+    const grid = document.getElementById('websites-cards-grid');
+    const loadingEl = document.getElementById('websites-loading');
+    const emptyEl = document.getElementById('websites-empty');
+    const searchInput = document.getElementById('websites-search-input');
+    const chipsContainer = document.getElementById('category-filter-chips');
+    const addBtn = document.getElementById('open-add-link-modal-btn');
+    const modal = document.getElementById('add-link-modal');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const modalCancelBtn = document.getElementById('modal-cancel-btn');
+    const addForm = document.getElementById('add-link-form');
+    const submitBtn = document.getElementById('modal-submit-btn');
+
+    if (!grid) return;
+
+    let allWebsites = [];
+    let currentCategory = 'all';
+    let currentSearchQuery = '';
+
+    // Fallback data in case server is viewed statically
+    const fallbackWebsites = [
+      {
+        id: 1,
+        title: "Jaya Bhavani Retail Gold & Silver Billing SaaS",
+        category: "Billing Software",
+        description: "Production-grade retail jewelry billing engine with live market rate sync, automated discount calculation, and thermal receipt printing.",
+        url: "https://jb-billing.applyus.io",
+        preview_image: "./carousel/image-1.webp",
+        badge: "Live Production",
+        tech_stack: ["React", "Node.js", "PostgreSQL", "Thermal API"],
+        status: "Active"
+      },
+      {
+        id: 2,
+        title: "Autonomous Voice AI Inbound Support Telephony Bot",
+        category: "AI Calling Agents",
+        description: "Sub-50ms conversational telephony agent handling customer order status inquiries, bookings, and CRM deal qualification 24/7.",
+        url: "https://voice.applyus.io/demo",
+        preview_image: "./carousel/image-2.webp",
+        badge: "Live Voice AI",
+        tech_stack: ["WebSockets", "WebRTC", "OpenAI Whisper", "FastAPI"],
+        status: "Active"
+      },
+      {
+        id: 3,
+        title: "ApplyUS Multi-Tenant Enterprise CRM & Deal Pipeline",
+        category: "Enterprise CRM",
+        description: "Tailored CRM with visual Kanban deal stages, automated WhatsApp notifications, email sequences, and lead attribution scoring.",
+        url: "https://crm.applyus.io",
+        preview_image: "./carousel/image-3.webp",
+        badge: "Enterprise Live",
+        tech_stack: ["Next.js", "Tailwind", "PostgreSQL", "Stripe"],
+        status: "Active"
+      },
+      {
+        id: 4,
+        title: "Omnichannel Cloud ERP & Multi-Warehouse Logistics",
+        category: "Cloud ERP",
+        description: "Enterprise resource planning system tracking inventory across 5 branches, automated purchase orders, and worker accounting.",
+        url: "https://erp.applyus.io",
+        preview_image: "./carousel/image-4.webp",
+        badge: "Cloud Deployment",
+        tech_stack: ["React", "Express", "Neon PostgreSQL", "Docker"],
+        status: "Active"
+      },
+      {
+        id: 5,
+        title: "Enterprise Knowledge RAG & Customer AI Assistant",
+        category: "AI Chatbots",
+        description: "Context-grounded conversational bot trained on internal documents with zero hallucinations, pgvector search, and citations.",
+        url: "https://chat.applyus.io",
+        preview_image: "./carousel/image-5.webp",
+        badge: "RAG Live",
+        tech_stack: ["pgvector", "LangChain", "Claude 3.5", "Next.js"],
+        status: "Active"
+      },
+      {
+        id: 6,
+        title: "Craftsman Mobile Portal & Assigned Orders Tracker",
+        category: "Mobile Apps",
+        description: "Lightweight PWA for workers to track gold/silver balances, view assigned jobs, and upload finished item photos.",
+        url: "https://craftsman.applyus.io",
+        preview_image: "./carousel/image-6.webp",
+        badge: "Mobile Live",
+        tech_stack: ["PWA", "React", "Node.js", "AWS S3"],
+        status: "Active"
+      }
+    ];
+
+    // Load data from Neon PostgreSQL API
+    async function loadWebsites() {
+      if (loadingEl) loadingEl.style.display = 'flex';
+      try {
+        const response = await fetch('/api/websites');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+            allWebsites = result.data;
+          } else {
+            allWebsites = fallbackWebsites;
+          }
+        } else {
+          allWebsites = fallbackWebsites;
+        }
+      } catch (err) {
+        console.warn('API fetch failed, falling back to cached datasets:', err);
+        allWebsites = fallbackWebsites;
+      } finally {
+        if (loadingEl) loadingEl.style.display = 'none';
+        renderCards();
+      }
+    }
+
+    // Render Website Cards
+    function renderCards() {
+      const filtered = allWebsites.filter(site => {
+        const matchesCategory = currentCategory === 'all' || 
+          (site.category && site.category.toLowerCase().trim() === currentCategory.toLowerCase().trim());
+        
+        const q = currentSearchQuery.toLowerCase().trim();
+        const matchesSearch = !q ||
+          (site.title && site.title.toLowerCase().includes(q)) ||
+          (site.description && site.description.toLowerCase().includes(q)) ||
+          (site.category && site.category.toLowerCase().includes(q)) ||
+          (site.url && site.url.toLowerCase().includes(q)) ||
+          (Array.isArray(site.tech_stack) && site.tech_stack.some(t => t.toLowerCase().includes(q)));
+
+        return matchesCategory && matchesSearch;
+      });
+
+      // Clear previous cards (except loading spinner and empty state elements)
+      const existingCards = grid.querySelectorAll('.website-card');
+      existingCards.forEach(c => c.remove());
+
+      if (filtered.length === 0) {
+        if (emptyEl) emptyEl.style.display = 'block';
+      } else {
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        filtered.forEach(site => {
+          const card = document.createElement('div');
+          card.className = 'website-card';
+          card.setAttribute('data-id', site.id || '');
+
+          // Tech stack tags
+          let techPills = '';
+          const techList = Array.isArray(site.tech_stack) 
+            ? site.tech_stack 
+            : (typeof site.tech_stack === 'string' ? site.tech_stack.split(',').map(s => s.trim()) : []);
+
+          techList.forEach(tech => {
+            if (tech) techPills += `<span class="tech-pill">${tech}</span>`;
+          });
+
+          // Clean display URL (e.g. jb-billing.applyus.io)
+          const displayUrl = site.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+          card.innerHTML = `
+            <div class="website-card-image-wrap">
+              <img src="${site.preview_image || './carousel/image-1.webp'}" alt="${site.title}" class="website-card-img" onerror="this.src='./carousel/image-1.webp'" />
+              <div class="website-card-overlay">
+                <a href="${site.url}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm external-preview-btn">
+                  Launch Site <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                </a>
+              </div>
+              <div class="website-card-badge">
+                <span class="live-dot-pulse"></span>
+                ${site.badge || 'Live Production'}
+              </div>
+            </div>
+            <div class="website-card-body">
+              <div class="website-card-meta">
+                <span class="website-category-tag">${site.category || 'Web Application'}</span>
+                <span class="website-status-tag"><i class="fa-solid fa-circle-check"></i> ${site.status || 'Active'}</span>
+              </div>
+              <h3 class="website-card-title">${site.title}</h3>
+              <p class="website-card-desc">${site.description || 'Production SaaS platform deployed and actively maintained.'}</p>
+              
+              <div class="website-card-tech">
+                ${techPills}
+              </div>
+
+              <div class="website-card-footer">
+                <a href="${site.url}" target="_blank" rel="noopener noreferrer" class="website-link-btn" title="Open ${displayUrl} in a new tab">
+                  <span class="website-url-text">${displayUrl}</span>
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                </a>
+              </div>
+            </div>
+          `;
+
+          grid.appendChild(card);
+        });
+      }
+
+      if (window.lucide) window.lucide.createIcons();
+    }
+
+    // Category Filter Chips click
+    if (chipsContainer) {
+      chipsContainer.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          chipsContainer.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+          currentCategory = chip.getAttribute('data-category') || 'all';
+          renderCards();
+        });
+      });
+    }
+
+    // Search Input Real-Time Debounced Filtering
+    if (searchInput) {
+      let searchTimeout = null;
+      searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          currentSearchQuery = e.target.value;
+          renderCards();
+        }, 150);
+      });
+    }
+
+    // Modal Handlers
+    function openModal() {
+      if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    function closeModal() {
+      if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+        if (addForm) addForm.reset();
+      }
+    }
+
+    if (addBtn) addBtn.addEventListener('click', openModal);
+    if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeModal);
+    if (modalCancelBtn) modalCancelBtn.addEventListener('click', closeModal);
+
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+    }
+
+    // Form Submission to Neon PostgreSQL
+    if (addForm) {
+      addForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const title = document.getElementById('link-title')?.value.trim();
+        const category = document.getElementById('link-category')?.value;
+        const url = document.getElementById('link-url')?.value.trim();
+        const previewImage = document.getElementById('link-preview')?.value.trim() || './carousel/image-1.webp';
+        const description = document.getElementById('link-description')?.value.trim();
+        const techStackRaw = document.getElementById('link-tech')?.value.trim();
+        const badge = document.getElementById('link-badge')?.value.trim() || 'Live Production';
+
+        if (!title || !url || !category) {
+          alert('Please fill in Title, Category, and URL.');
+          return;
+        }
+
+        const techStack = techStackRaw 
+          ? techStackRaw.split(',').map(s => s.trim()).filter(Boolean)
+          : ["React", "PostgreSQL"];
+
+        const payload = {
+          title,
+          category,
+          url,
+          preview_image: previewImage,
+          description,
+          tech_stack: techStack,
+          badge,
+          status: 'Active'
+        };
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving to Neon DB...';
+        }
+
+        try {
+          const response = await fetch('/api/websites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            const resData = await response.json();
+            if (resData.success && resData.data) {
+              allWebsites.unshift(resData.data);
+            } else {
+              allWebsites.unshift({ id: Date.now(), ...payload });
+            }
+          } else {
+            // Local fallback
+            allWebsites.unshift({ id: Date.now(), ...payload });
+          }
+
+          closeModal();
+          renderCards();
+
+          // Scroll to the newly added item smoothly
+          grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+          console.error('Error posting to database:', err);
+          allWebsites.unshift({ id: Date.now(), ...payload });
+          closeModal();
+          renderCards();
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Save & Publish Hyperlink';
+          }
+        }
+      });
+    }
+
+    // Initial load
+    loadWebsites();
+  }
+
   // 9. Smooth Scroll for internal navigation links
   document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function(e) {

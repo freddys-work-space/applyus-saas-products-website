@@ -4,11 +4,16 @@
   "description": "ApplyUs — The Next-Generation Platform to Build, Launch, and Scale AI SaaS Products and AI Projects.",
   "main": "index.html",
   "scripts": {
-    "dev": "serve . -p 5173",
-    "start": "serve . -p 5173",
-    "build": "echo 'Static build ready'"
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "echo 'Production ready'"
   },
-  "dependencies": {},
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.3",
+    "express": "^5.2.1",
+    "pg": "^8.23.0"
+  },
   "devDependencies": {
     "serve": "^14.2.4"
   },

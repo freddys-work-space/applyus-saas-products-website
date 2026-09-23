@@ -47,6 +47,7 @@
       <!-- Desktop Nav Links -->
       <ul class="nav-links">
         <li><a href="#work" class="nav-link">Our Work</a></li>
+        <li><a href="#live-websites" class="nav-link">Live Websites</a></li>
         <li><a href="#products" class="nav-link">What We Build</a></li>
         <li><a href="#solutions" class="nav-link">Interactive Demos</a></li>
         <li><a href="#services" class="nav-link">Services</a></li>
@@ -72,6 +73,7 @@
     <div class="mobile-drawer" id="mobile-drawer">
       <ul class="mobile-nav-list">
         <li><a href="#work" class="mobile-nav-item">Our Work</a></li>
+        <li><a href="#live-websites" class="mobile-nav-item">Live Websites</a></li>
         <li><a href="#products" class="mobile-nav-item">What We Build</a></li>
         <li><a href="#solutions" class="mobile-nav-item">Interactive Demos</a></li>
         <li><a href="#services" class="mobile-nav-item">Services</a></li>
@@ -509,6 +511,156 @@
 
     </div>
   </section>
+
+  <!-- 8.8 LIVE WEBSITES & DEPLOYED SYSTEMS DIRECTORY (PostgreSQL Neon Powered) -->
+  <section class="live-websites-section" id="live-websites">
+    <div class="container">
+
+      <!-- Section Header -->
+      <div class="section-header text-center" style="max-width: 900px; margin: 0 auto 46px auto;">
+        <div class="eyebrow-pill" style="margin: 0 auto 16px auto; display: inline-flex;">
+          <span class="eyebrow-dot"></span>
+          <span>POSTGRESQL NEON DATABASE DIRECTORY</span>
+        </div>
+        <h2 class="section-title">
+          Live Websites & Production Hyperlinks.<br>
+          <span class="highlight-blue">Explore Live Applications Built by ApplyUS.</span>
+        </h2>
+        <p class="section-subtitle">
+          Directly query live client platforms, billing software engines, AI voice telephony portals, and ERP architectures stored in our cloud PostgreSQL database.
+        </p>
+      </div>
+
+      <!-- Controls & Filter Toolbar -->
+      <div class="directory-toolbar">
+        
+        <!-- Search Input -->
+        <div class="directory-search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input 
+            type="text" 
+            id="websites-search-input" 
+            placeholder="Search live websites, categories, or tech stack..." 
+            autocomplete="off"
+          />
+          <button id="clear-search-btn" class="clear-search-btn" style="display: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Action: Add New Link -->
+        <div class="toolbar-actions">
+          <button id="open-add-website-modal-btn" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-plus"></i>
+            <span>Add Live Link</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Category Filter Chips -->
+      <div class="directory-filter-chips" id="category-filter-chips">
+        <button class="filter-chip active" data-category="All">All Projects (<span id="count-all">...</span>)</button>
+        <button class="filter-chip" data-category="Billing Software">Billing Software</button>
+        <button class="filter-chip" data-category="AI Calling Agents">AI Calling Agents</button>
+        <button class="filter-chip" data-category="Enterprise CRM">Enterprise CRM</button>
+        <button class="filter-chip" data-category="Cloud ERP">Cloud ERP</button>
+        <button class="filter-chip" data-category="AI Chatbots">AI Chatbots</button>
+        <button class="filter-chip" data-category="Mobile Apps">Mobile Apps</button>
+      </div>
+
+      <!-- Dynamic Cards Grid (Populated via /api/websites) -->
+      <div class="websites-cards-grid" id="websites-cards-grid">
+        <!-- Loading State Spinner -->
+        <div class="directory-loading-state" id="directory-loading">
+          <div class="spinner-circle"></div>
+          <p>Connecting to Neon PostgreSQL & fetching live project hyperlinks...</p>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div class="directory-empty-state" id="directory-empty" style="display: none;">
+        <i class="fa-solid fa-folder-open empty-icon"></i>
+        <h3>No project hyperlinks found</h3>
+        <p>Try searching for another keyword or category filter.</p>
+        <button class="btn btn-secondary btn-sm" id="reset-filter-btn">Reset Filters</button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Add New Website Link Modal -->
+  <div class="modal-overlay" id="add-website-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-icon bg-blue-subtle">
+            <i class="fa-solid fa-link"></i>
+          </div>
+          <div>
+            <h3 class="modal-title">Add Live Website Hyperlink</h3>
+            <p class="modal-subtitle">Store a new live application record into Neon PostgreSQL</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="close-modal-btn" aria-label="Close modal">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="add-website-form" class="modal-form">
+        <div class="form-group">
+          <label for="link-title">Website / Project Title <span class="required">*</span></label>
+          <input type="text" id="link-title" required placeholder="e.g. Jaya Bhavani Retail Jewelry Billing SaaS" />
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="link-category">Category <span class="required">*</span></label>
+            <select id="link-category" required>
+              <option value="Billing Software">Billing Software</option>
+              <option value="AI Calling Agents">AI Calling Agents</option>
+              <option value="Enterprise CRM">Enterprise CRM</option>
+              <option value="Cloud ERP">Cloud ERP</option>
+              <option value="AI Chatbots">AI Chatbots</option>
+              <option value="Mobile Apps">Mobile Apps</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="link-badge">Status Badge</label>
+            <input type="text" id="link-badge" placeholder="e.g. Live Production, Beta" value="Live Production" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="link-url">Live Website URL (Hyperlink) <span class="required">*</span></label>
+          <input type="url" id="link-url" required placeholder="https://app.yourdomain.com" />
+        </div>
+
+        <div class="form-group">
+          <label for="link-image">Preview Image (from carousel bucket or URL)</label>
+          <input type="text" id="link-image" placeholder="./carousel/image-1.webp" value="./carousel/image-1.webp" />
+        </div>
+
+        <div class="form-group">
+          <label for="link-tech">Tech Stack (comma-separated)</label>
+          <input type="text" id="link-tech" placeholder="React, Node.js, PostgreSQL, Stripe API" value="React, Node.js, PostgreSQL" />
+        </div>
+
+        <div class="form-group">
+          <label for="link-desc">Description</label>
+          <textarea id="link-desc" rows="3" placeholder="Brief summary of the live application features, customer benefits, and architecture..."></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancel-modal-btn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="save-link-btn">
+            <span>Save to Database</span>
+            <i class="fa-solid fa-database"></i>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- 9. ABOUT / CORE VALUE PILLARS (Who We Are, What We Do, How It Helps You, Track & Grow Anywhere) -->
   <section class="about-section" id="about">
