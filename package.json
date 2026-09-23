@@ -1,0 +1,26 @@
+{
+  "name": "applyus-ai-saas-platform",
+  "version": "1.0.0",
+  "description": "ApplyUs — The Next-Generation Platform to Build, Launch, and Scale AI SaaS Products and AI Projects.",
+  "main": "index.html",
+  "scripts": {
+    "dev": "serve . -p 5173",
+    "start": "serve . -p 5173",
+    "build": "echo 'Static build ready'"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "serve": "^14.2.4"
+  },
+  "keywords": [
+    "ai-saas",
+    "ai-project-builder",
+    "applyus",
+    "saas-scaffolding",
+    "agentic-ai",
+    "rag",
+    "fullstack-ai"
+  ],
+  "author": "ApplyUs",
+  "license": "MIT"
+}
