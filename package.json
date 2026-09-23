@@ -9,10 +9,14 @@
     "build": "echo 'Production ready'"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1138.0",
+    "@aws-sdk/s3-request-presigner": "^3.1138.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.3",
     "express": "^5.2.1",
-    "pg": "^8.23.0"
+    "multer": "^2.4.0",
+    "pg": "^8.23.0",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "serve": "^14.2.4"

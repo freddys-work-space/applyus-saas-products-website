@@ -2,10 +2,43 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const sharp = require('sharp');
 const { Pool } = require('pg');
+const { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 5173;
+
+// Configure Multer for in-memory image uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Initialize S3 Client if configured
+let s3Client = null;
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'carousel';
+const s3AccessKey = process.env.AWS_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID;
+const s3SecretKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY;
+const s3Endpoint = process.env.AWS_ENDPOINT_URL_S3 || process.env.S3_ENDPOINT;
+const s3Region = process.env.AWS_REGION || process.env.S3_REGION || 'us-east-2';
+
+if (s3AccessKey && s3SecretKey) {
+  s3Client = new S3Client({
+    region: s3Region,
+    endpoint: s3Endpoint || undefined,
+    credentials: {
+      accessKeyId: s3AccessKey,
+      secretAccessKey: s3SecretKey
+    },
+    forcePathStyle: true // Needed for custom S3 endpoints
+  });
+  console.log(`📦 Neon S3 Client connected to bucket: "${S3_BUCKET_NAME}"`);
+} else {
+  console.log(`ℹ️ S3 credentials not set in .env yet. Running in hybrid local/database mode.`);
+}
 
 // Middleware
 app.use(cors());
@@ -22,6 +55,7 @@ const pool = new Pool({
     rejectUnauthorized: false
   }
 });
+
 
 // Initialize Database Tables & Seed Initial Data
 async function initDatabase() {
@@ -175,8 +209,113 @@ async function initDatabase() {
 }
 
 // ==========================================
+// ADMIN AUTHENTICATION & 60s LOCKOUT LOGIC
+// ==========================================
+const loginAttempts = new Map(); // key: ip/user -> { attempts: count, lockedUntil: timestamp }
+const LOCKOUT_DURATION_MS = 60 * 1000; // 60 seconds lockout
+const MAX_FAILED_ATTEMPTS = 3;
+
+// Helper: Check if client is locked out
+function getLockoutStatus(identifier) {
+  const record = loginAttempts.get(identifier);
+  if (!record) return { locked: false, remainingSeconds: 0, attempts: 0 };
+
+  const now = Date.now();
+  if (record.lockedUntil && record.lockedUntil > now) {
+    const remainingSeconds = Math.ceil((record.lockedUntil - now) / 1000);
+    return { locked: true, remainingSeconds, attempts: record.attempts };
+  }
+
+  // If lockout expired, reset
+  if (record.lockedUntil && record.lockedUntil <= now) {
+    loginAttempts.delete(identifier);
+    return { locked: false, remainingSeconds: 0, attempts: 0 };
+  }
+
+  return { locked: false, remainingSeconds: 0, attempts: record.attempts };
+}
+
+// 1. Admin Login Endpoint (with 3-attempt 60s cooldown)
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = req.body;
+  const clientIp = req.ip || req.connection.remoteAddress || 'client';
+  const identifier = `${clientIp}_${username || 'user'}`;
+
+  // Check lockout status
+  const status = getLockoutStatus(identifier);
+  if (status.locked) {
+    return res.status(429).json({
+      success: false,
+      locked: true,
+      remainingSeconds: status.remainingSeconds,
+      error: `Security Lockout Active: Too many failed attempts. Please wait ${status.remainingSeconds}s before trying again.`
+    });
+  }
+
+  const validUsername = process.env.ADMIN_USERNAME || 'admin';
+  const validPassword = process.env.ADMIN_PASSWORD || 'admin@applyus2026';
+
+  if (username === validUsername && password === validPassword) {
+    // Reset failed attempts on success
+    loginAttempts.delete(identifier);
+    const token = Buffer.from(`${username}:${Date.now()}:${process.env.JWT_SECRET || 'applyus'}`).toString('base64');
+    return res.json({
+      success: true,
+      message: 'Authentication successful',
+      token,
+      username
+    });
+  }
+
+  // Increment failed attempts
+  const currentAttempts = (status.attempts || 0) + 1;
+  if (currentAttempts >= MAX_FAILED_ATTEMPTS) {
+    const lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
+    loginAttempts.set(identifier, { attempts: currentAttempts, lockedUntil });
+    return res.status(429).json({
+      success: false,
+      locked: true,
+      remainingSeconds: 60,
+      attempts: currentAttempts,
+      error: `3 incorrect password attempts reached. Account locked for 60 seconds.`
+    });
+  } else {
+    loginAttempts.set(identifier, { attempts: currentAttempts, lockedUntil: null });
+    const remainingAttempts = MAX_FAILED_ATTEMPTS - currentAttempts;
+    return res.status(401).json({
+      success: false,
+      locked: false,
+      remainingAttempts,
+      error: `Incorrect credentials. ${remainingAttempts} attempt${remainingAttempts > 1 ? 's' : ''} remaining before a 60-second lockout.`
+    });
+  }
+});
+
+// 2. Admin Verify Token
+app.get('/api/admin/verify', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, authenticated: false });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = Buffer.from(token, 'base64').toString('utf8');
+    const [user] = decoded.split(':');
+    if (user === (process.env.ADMIN_USERNAME || 'admin')) {
+      return res.json({ success: true, authenticated: true, username: user });
+    }
+  } catch (e) {}
+  return res.status(401).json({ success: false, authenticated: false });
+});
+
+// ==========================================
 // REST API ROUTES
 // ==========================================
+
+// Serve /admin route to admin.html
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
 
 // 1. Get all Carousel Items
 app.get('/api/carousel', async (req, res) => {
@@ -277,6 +416,118 @@ app.delete('/api/websites/:id', async (req, res) => {
     res.json({ success: true, message: 'Website link deleted' });
   } catch (err) {
     console.error('Error deleting website link:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5.5 Delete a Carousel Item
+app.delete('/api/carousel/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM carousel_items WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Carousel item deleted from database' });
+  } catch (err) {
+    console.error('Error deleting carousel item:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Upload Image to S3 Bucket & Record in Neon DB (Auto-Converts to WebP)
+app.post('/api/upload', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No image file uploaded' });
+    }
+
+    const { title, category, tag, url, target } = req.body;
+    
+    // Automatically convert incoming image to optimized WebP format
+    let imageBuffer = req.file.buffer;
+    try {
+      imageBuffer = await sharp(req.file.buffer)
+        .webp({ quality: 88, effort: 4 })
+        .toBuffer();
+    } catch (sharpErr) {
+      console.warn('WebP conversion fallback to original buffer:', sharpErr.message);
+    }
+
+    const fileName = `image-${Date.now()}.webp`;
+    const contentType = 'image/webp';
+
+    let publicUrl = `./carousel/${fileName}`;
+
+    if (s3Client) {
+      const uploadParams = {
+        Bucket: S3_BUCKET_NAME,
+        Key: fileName,
+        Body: imageBuffer,
+        ContentType: contentType
+      };
+
+      await s3Client.send(new PutObjectCommand(uploadParams));
+      
+      const endpoint = process.env.AWS_ENDPOINT_URL_S3 || process.env.S3_ENDPOINT;
+      const baseUrl = process.env.S3_PUBLIC_URL || (endpoint ? `${endpoint}/${S3_BUCKET_NAME}` : `https://${S3_BUCKET_NAME}.s3.amazonaws.com`);
+      publicUrl = `${baseUrl}/${fileName}`;
+      console.log(`✅ Uploaded WebP to Neon S3 Bucket: ${publicUrl}`);
+    } else {
+      // Save locally to carousel/ if S3 credentials are not yet entered
+      const localFilePath = path.join(__dirname, 'carousel', fileName);
+      fs.writeFileSync(localFilePath, imageBuffer);
+      publicUrl = `./carousel/${fileName}`;
+      console.log(`💾 Saved WebP locally to: ${publicUrl}`);
+    }
+
+    // Optionally create database record directly
+    if (target === 'carousel') {
+      const dbRes = await pool.query(
+        `INSERT INTO carousel_items (image_url, title, tag, project_url) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [publicUrl, title || 'New Carousel Item', tag || 'SAAS APPLICATION', url || '#']
+      );
+      return res.status(201).json({ success: true, url: publicUrl, data: dbRes.rows[0] });
+    } else if (target === 'website') {
+      const dbRes = await pool.query(
+        `INSERT INTO website_links (title, category, url, preview_image) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [title || 'New Website Link', category || 'Billing Software', url || '#', publicUrl]
+      );
+      return res.status(201).json({ success: true, url: publicUrl, data: dbRes.rows[0] });
+    }
+
+    res.json({ success: true, url: publicUrl, message: 'Image uploaded successfully' });
+  } catch (err) {
+    console.error('Error uploading image:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. List Objects in S3 Bucket
+app.get('/api/bucket/carousel', async (req, res) => {
+  try {
+    if (!s3Client) {
+      // Fallback: list local carousel files
+      const localDir = path.join(__dirname, 'carousel');
+      const files = fs.existsSync(localDir) ? fs.readdirSync(localDir).map(f => `./carousel/${f}`) : [];
+      return res.json({ success: true, mode: 'local', count: files.length, images: files });
+    }
+
+    const command = new ListObjectsV2Command({
+      Bucket: S3_BUCKET_NAME
+    });
+
+    const response = await s3Client.send(command);
+    const endpoint = process.env.AWS_ENDPOINT_URL_S3 || process.env.S3_ENDPOINT;
+    const baseUrl = process.env.S3_PUBLIC_URL || (endpoint ? `${endpoint}/${S3_BUCKET_NAME}` : `https://${S3_BUCKET_NAME}.s3.amazonaws.com`);
+    
+    const items = (response.Contents || []).map(item => ({
+      key: item.Key,
+      size: item.Size,
+      lastModified: item.LastModified,
+      url: `${baseUrl}/${item.Key}`
+    }));
+
+    res.json({ success: true, mode: 's3', count: items.length, images: items });
+  } catch (err) {
+    console.error('Error listing S3 bucket:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ApplyUS — Cloud Admin Portal</title>
+  <link rel="icon" href="./applyus.webp" type="image/webp">
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="./admin.css">
+</head>
+<body>
+
+  <!-- =========================================================================
+       1. ADMIN LOGIN VIEW
+       ========================================================================= -->
+  <div id="admin-login-view" class="auth-wrapper">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo-badge">
+          <img src="./applyus.webp" alt="ApplyUS Logo" class="auth-logo-img" />
+        </div>
+        <h1 class="auth-title">Admin Management Portal</h1>
+        <p class="auth-subtitle">Neon PostgreSQL & S3 Cloud Storage Control Plane</p>
+      </div>
+
+      <!-- Lockout Alert Banner -->
+      <div id="lockout-banner" class="alert-box alert-danger" style="display: none;">
+        <i class="fa-solid fa-triangle-exclamation alert-icon"></i>
+        <div class="alert-text">
+          <strong id="lockout-title">Security Lockout Active</strong>
+          <p id="lockout-msg">Too many failed attempts. Please wait <span id="lockout-seconds" class="timer-badge">60s</span> before trying again.</p>
+        </div>
+      </div>
+
+      <!-- Error Message Banner -->
+      <div id="login-error-banner" class="alert-box alert-warning" style="display: none;">
+        <i class="fa-solid fa-circle-exclamation alert-icon"></i>
+        <div class="alert-text">
+          <strong id="error-title">Login Failed</strong>
+          <p id="error-msg">Incorrect username or password.</p>
+        </div>
+      </div>
+
+      <form id="admin-login-form" class="auth-form">
+        <div class="form-field">
+          <label for="admin-username">Username <span class="req">*</span></label>
+          <div class="input-with-icon">
+            <i class="fa-solid fa-user-shield field-icon"></i>
+            <input type="text" id="admin-username" placeholder="admin" required autocomplete="username" />
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="admin-password">Password <span class="req">*</span></label>
+          <div class="input-with-icon">
+            <i class="fa-solid fa-lock field-icon"></i>
+            <input type="password" id="admin-password" placeholder="••••••••••••" required autocomplete="current-password" />
+            <button type="button" id="toggle-pwd-btn" class="pwd-toggle-btn" title="Toggle password visibility">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+          <span class="field-hint"><i class="fa-solid fa-shield-halved"></i> 3 incorrect attempts locks the account for 60 seconds</span>
+        </div>
+
+        <button type="submit" id="login-submit-btn" class="btn btn-primary-admin w-100">
+          <span class="btn-text"><i class="fa-solid fa-arrow-right-to-bracket"></i> Sign In to Admin Console</span>
+        </button>
+
+        <div class="auth-footer-links">
+          <a href="/" class="back-home-link"><i class="fa-solid fa-arrow-left"></i> Return to Live Landing Page</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- =========================================================================
+       2. ADMIN DASHBOARD VIEW (Shown when authenticated)
+       ========================================================================= -->
+  <div id="admin-dashboard-view" class="dashboard-wrapper" style="display: none;">
+    <!-- Top Navigation -->
+    <header class="admin-topbar">
+      <div class="topbar-left">
+        <a href="/" class="admin-brand">
+          <img src="./applyus.webp" alt="ApplyUS Logo" class="admin-brand-logo" />
+          <div class="brand-text-group">
+            <span class="brand-title">ApplyUS <span class="brand-badge">ADMIN</span></span>
+            <span class="brand-env"><span class="pulse-dot"></span> Neon PostgreSQL & S3 Active</span>
+          </div>
+        </a>
+      </div>
+
+      <div class="topbar-right">
+        <a href="/" target="_blank" class="btn btn-outline-light btn-sm">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i> View Live Site
+        </a>
+        <div class="user-pill">
+          <i class="fa-solid fa-circle-user"></i>
+          <span id="logged-admin-name">admin</span>
+        </div>
+        <button id="admin-logout-btn" class="btn btn-danger-subtle btn-sm" title="Sign Out">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Admin Container -->
+    <main class="admin-main">
+      <!-- Admin Tab Header Navigation -->
+      <nav class="admin-tabs-nav">
+        <button class="admin-tab-btn active" data-tab="carousel-tab">
+          <i class="fa-solid fa-images"></i> Carousel Images Manager
+        </button>
+        <button class="admin-tab-btn" data-tab="websites-tab">
+          <i class="fa-solid fa-globe"></i> Live Website Hyperlinks
+        </button>
+        <button class="admin-tab-btn" data-tab="bucket-tab">
+          <i class="fa-solid fa-bucket"></i> Neon S3 Bucket Explorer
+        </button>
+      </nav>
+
+      <!-- Global Toast Notification -->
+      <div id="admin-toast" class="admin-toast" style="display: none;">
+        <i id="toast-icon" class="fa-solid fa-circle-check"></i>
+        <span id="toast-message">Action completed successfully.</span>
+      </div>
+
+      <!-- ===================================================================
+           TAB 1: CAROUSEL IMAGES MANAGER
+           =================================================================== -->
+      <section id="carousel-tab" class="admin-tab-pane active">
+        <div class="pane-grid-2">
+          <!-- Form: Upload Carousel Slide -->
+          <div class="admin-panel card-panel">
+            <div class="panel-header">
+              <div class="panel-icon bg-blue-glow"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+              <div>
+                <h2 class="panel-title">Add Carousel Slide</h2>
+                <p class="panel-subtitle">Upload image directly into Neon S3 Bucket & register slide</p>
+              </div>
+            </div>
+
+            <form id="carousel-upload-form" class="panel-form">
+              <div class="form-field">
+                <label>Slide Title <span class="req">*</span></label>
+                <input type="text" id="carousel-title" placeholder="e.g., Live Gold & Silver Billing Engine" required />
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-field">
+                  <label>Category Tag</label>
+                  <input type="text" id="carousel-tag" placeholder="e.g., FINTECH & BILLING" value="SAAS APPLICATION" />
+                </div>
+                <div class="form-field">
+                  <label>Display Order</label>
+                  <input type="number" id="carousel-order" placeholder="1" value="1" min="1" />
+                </div>
+              </div>
+
+              <div class="form-field">
+                <label>Target Project URL</label>
+                <input type="text" id="carousel-url" placeholder="e.g., app.applyus.io/billing-engine" value="app.applyus.io" />
+              </div>
+
+              <div class="form-field">
+                <label>Select Image File (Uploads to Neon S3) <span class="req">*</span></label>
+                <div class="file-dropzone" id="carousel-dropzone">
+                  <input type="file" id="carousel-file" accept="image/webp,image/png,image/jpeg" required />
+                  <div class="dropzone-content">
+                    <i class="fa-solid fa-image dropzone-icon"></i>
+                    <span class="dropzone-text" id="carousel-file-label">Click or Drag & Drop image here (.webp, .png, .jpg)</span>
+                    <span class="dropzone-sub">Uploads straight to Neon S3 Bucket <code>carousel/</code></span>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" id="carousel-submit-btn" class="btn btn-primary-admin w-100">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Upload to S3 & Add to Carousel
+              </button>
+            </form>
+          </div>
+
+          <!-- Existing Carousel Items List -->
+          <div class="admin-panel card-panel">
+            <div class="panel-header flex-between">
+              <div>
+                <h2 class="panel-title">Active Carousel Slides (<span id="carousel-count">0</span>)</h2>
+                <p class="panel-subtitle">Fetched live from Neon PostgreSQL</p>
+              </div>
+              <button id="refresh-carousel-btn" class="btn btn-outline-light btn-sm" title="Refresh">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh
+              </button>
+            </div>
+
+            <div id="carousel-items-list" class="items-list-container">
+              <div class="spinner-state"><i class="fa-solid fa-spinner fa-spin"></i> Loading slides from Neon DB...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           TAB 2: LIVE WEBSITES HYPERLINKS MANAGER
+           =================================================================== -->
+      <section id="websites-tab" class="admin-tab-pane">
+        <div class="pane-grid-2">
+          <!-- Form: Add Website Hyperlink -->
+          <div class="admin-panel card-panel">
+            <div class="panel-header">
+              <div class="panel-icon bg-emerald-glow"><i class="fa-solid fa-globe"></i></div>
+              <div>
+                <h2 class="panel-title">Add Website Hyperlink</h2>
+                <p class="panel-subtitle">Publish live production URL to directory</p>
+              </div>
+            </div>
+
+            <form id="website-add-form" class="panel-form">
+              <div class="form-field">
+                <label>Website Name / Title <span class="req">*</span></label>
+                <input type="text" id="web-title" placeholder="e.g., Jaya Bhavani Retail Gold Billing SaaS" required />
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-field">
+                  <label>Category <span class="req">*</span></label>
+                  <select id="web-category" required>
+                    <option value="Billing Software">Billing Software</option>
+                    <option value="AI Calling Agents">AI Calling Agents</option>
+                    <option value="Enterprise CRM">Enterprise CRM</option>
+                    <option value="Cloud ERP">Cloud ERP</option>
+                    <option value="AI Chatbots">AI Chatbots</option>
+                    <option value="Mobile Apps">Mobile Apps</option>
+                    <option value="SaaS Platform">SaaS Platform</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Status Badge</label>
+                  <input type="text" id="web-badge" placeholder="Live Production" value="Live Production" />
+                </div>
+              </div>
+
+              <div class="form-field">
+                <label>Production Hyperlink URL <span class="req">*</span></label>
+                <input type="url" id="web-url" placeholder="https://jb-billing.applyus.io" required />
+              </div>
+
+              <div class="form-field">
+                <label>Preview Image (Upload new to S3 or enter URL)</label>
+                <div class="input-with-upload">
+                  <input type="text" id="web-preview-url" placeholder="https://... or ./carousel/image-1.webp" />
+                  <label class="btn btn-outline-light btn-sm upload-inline-label">
+                    <i class="fa-solid fa-upload"></i> Upload File
+                    <input type="file" id="web-preview-file" accept="image/*" style="display: none;" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-field">
+                <label>Tech Stack Tags (Comma separated)</label>
+                <input type="text" id="web-tech" placeholder="React, Node.js, PostgreSQL, Docker" value="React, Node.js, PostgreSQL" />
+              </div>
+
+              <div class="form-field">
+                <label>Platform Description</label>
+                <textarea id="web-desc" rows="3" placeholder="Brief explanation of this live software platform..."></textarea>
+              </div>
+
+              <button type="submit" id="web-submit-btn" class="btn btn-primary-admin w-100">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Publish Website Hyperlink
+              </button>
+            </form>
+          </div>
+
+          <!-- Existing Website Hyperlinks List -->
+          <div class="admin-panel card-panel">
+            <div class="panel-header flex-between">
+              <div>
+                <h2 class="panel-title">Published Hyperlinks (<span id="websites-count">0</span>)</h2>
+                <p class="panel-subtitle">Stored in Neon PostgreSQL database</p>
+              </div>
+              <button id="refresh-websites-btn" class="btn btn-outline-light btn-sm" title="Refresh">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh
+              </button>
+            </div>
+
+            <div id="websites-items-list" class="items-list-container">
+              <div class="spinner-state"><i class="fa-solid fa-spinner fa-spin"></i> Loading websites from Neon DB...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           TAB 3: NEON S3 BUCKET EXPLORER
+           =================================================================== -->
+      <section id="bucket-tab" class="admin-tab-pane">
+        <div class="admin-panel card-panel">
+          <div class="panel-header flex-between">
+            <div>
+              <h2 class="panel-title">Neon S3 Bucket Objects Explorer</h2>
+              <p class="panel-subtitle">All images stored inside bucket <code>carousel/</code></p>
+            </div>
+            <button id="refresh-bucket-btn" class="btn btn-outline-light btn-sm">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh Bucket
+            </button>
+          </div>
+
+          <div id="bucket-objects-grid" class="bucket-grid">
+            <div class="spinner-state"><i class="fa-solid fa-spinner fa-spin"></i> Querying Neon S3 Bucket...</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- =========================================================================
+       3. UNIVERSAL IMAGE LIGHTBOX MODAL WITH DOWNLOAD OPTION
+       ========================================================================= -->
+  <div id="admin-lightbox-modal" class="lightbox-modal">
+    <div class="lightbox-container">
+      <div class="lightbox-header">
+        <div class="lightbox-title-group">
+          <h3 id="lightbox-title" class="lightbox-title">Image Preview</h3>
+          <span id="lightbox-sub" class="lightbox-sub">Neon S3 High-Resolution WebP Asset</span>
+        </div>
+        <button id="lightbox-close-btn" class="lightbox-close-btn" title="Close Preview (Esc)">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="lightbox-body">
+        <img id="lightbox-img" src="" alt="Full Preview" class="lightbox-image" />
+      </div>
+
+      <div class="lightbox-footer">
+        <span id="lightbox-url-text" class="lightbox-url-preview">https://...</span>
+        <div class="lightbox-actions">
+          <button id="lightbox-copy-btn" class="btn btn-outline-light btn-sm">
+            <i class="fa-regular fa-copy"></i> Copy URL
+          </button>
+          <a id="lightbox-download-btn" href="#" download class="btn btn-primary-admin btn-sm">
+            <i class="fa-solid fa-download"></i> Download Image (.webp)
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./admin.js"></script>
+</body>
+</html>

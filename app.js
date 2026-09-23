@@ -138,29 +138,56 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Auto-probe images from carousel/image-1 to image-50
-    const discoveredImages = [];
-    const extensions = ['webp', 'png', 'jpg', 'jpeg'];
-    let consecutiveMisses = 0;
+    let discoveredImages = [];
 
-    for (let i = 1; i <= 50; i++) {
-      let foundForIndex = null;
-      for (const ext of extensions) {
-        const candidateUrl = `./carousel/image-${i}.${ext}`;
-        const result = await testImage(candidateUrl);
-        if (result.exists) {
-          foundForIndex = { index: i, ...result };
-          break;
+    // 1. First try fetching dynamic carousel records from Neon PostgreSQL / S3 Bucket API
+    try {
+      const dbResponse = await fetch('/api/carousel');
+      if (dbResponse.ok) {
+        const dbJson = await dbResponse.json();
+        if (dbJson.success && Array.isArray(dbJson.data) && dbJson.data.length > 0) {
+          for (let i = 0; i < dbJson.data.length; i++) {
+            const row = dbJson.data[i];
+            const testRes = await testImage(row.image_url);
+            discoveredImages.push({
+              index: i + 1,
+              src: row.image_url,
+              width: testRes.width || 1200,
+              height: testRes.height || 800,
+              title: row.title,
+              tag: row.tag,
+              url: row.project_url
+            });
+          }
         }
       }
+    } catch (e) {
+      console.warn('Neon DB carousel fetch skipped, probing local files...', e);
+    }
 
-      if (foundForIndex) {
-        discoveredImages.push(foundForIndex);
-        consecutiveMisses = 0;
-      } else {
-        consecutiveMisses++;
-        // If 4 consecutive numbers miss, stop probing
-        if (consecutiveMisses >= 4 && i > 8) break;
+    // 2. Fallback to local probe if database returned no items
+    if (discoveredImages.length === 0) {
+      const extensions = ['webp', 'png', 'jpg', 'jpeg'];
+      let consecutiveMisses = 0;
+
+      for (let i = 1; i <= 50; i++) {
+        let foundForIndex = null;
+        for (const ext of extensions) {
+          const candidateUrl = `./carousel/image-${i}.${ext}`;
+          const result = await testImage(candidateUrl);
+          if (result.exists) {
+            foundForIndex = { index: i, ...result };
+            break;
+          }
+        }
+
+        if (foundForIndex) {
+          discoveredImages.push(foundForIndex);
+          consecutiveMisses = 0;
+        } else {
+          consecutiveMisses++;
+          if (consecutiveMisses >= 4 && i > 8) break;
+        }
       }
     }
 
@@ -188,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         slide.setAttribute('data-title', meta.title);
         slide.setAttribute('data-tag', meta.tag);
         slide.innerHTML = `
-          <img src="${imgData.src}" alt="${meta.title}" class="carousel-slide-img ${isPortrait ? 'mobile-portrait-img' : ''}" />
+          <img src="${imgData.src}" alt="${meta.title}" class="carousel-slide-img ${isPortrait ? 'mobile-portrait-img' : ''}" title="Click to view full preview & download image" />
           <div class="slide-caption-bar">
             <div class="caption-content">
               <span class="caption-tag">${meta.tag}</span>
@@ -197,6 +224,14 @@ document.addEventListener('DOMContentLoaded', () => {
             <a href="#contact" class="btn btn-primary btn-sm">Build Similar Software <i class="fa-solid fa-arrow-right"></i></a>
           </div>
         `;
+
+        // Click slide image to preview & download
+        slide.querySelector('.carousel-slide-img').addEventListener('click', () => {
+          if (window.openLandingLightbox) {
+            window.openLandingLightbox(imgData.src, meta.title, `${meta.tag} • High-Resolution Production UI`, meta.url);
+          }
+        });
+
         viewport.appendChild(slide);
 
         // 2. Build Thumbnail
@@ -260,8 +295,12 @@ document.addEventListener('DOMContentLoaded', () => {
         carouselUrl.textContent = url;
       }
 
-      if (allThumbs[currentSlideIndex]) {
-        allThumbs[currentSlideIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      if (thumbnailsContainer && allThumbs[currentSlideIndex]) {
+        const thumb = allThumbs[currentSlideIndex];
+        const containerRect = thumbnailsContainer.getBoundingClientRect();
+        const thumbRect = thumb.getBoundingClientRect();
+        const targetScroll = thumbnailsContainer.scrollLeft + (thumbRect.left - containerRect.left) - (containerRect.width / 2) + (thumbRect.width / 2);
+        thumbnailsContainer.scrollTo({ left: targetScroll, behavior: 'smooth' });
       }
     }
 
@@ -346,16 +385,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function initLiveWebsitesDirectory() {
     const grid = document.getElementById('websites-cards-grid');
-    const loadingEl = document.getElementById('websites-loading');
-    const emptyEl = document.getElementById('websites-empty');
+    const loadingEl = document.getElementById('directory-loading') || document.getElementById('websites-loading');
+    const emptyEl = document.getElementById('directory-empty') || document.getElementById('websites-empty');
     const searchInput = document.getElementById('websites-search-input');
     const chipsContainer = document.getElementById('category-filter-chips');
-    const addBtn = document.getElementById('open-add-link-modal-btn');
-    const modal = document.getElementById('add-link-modal');
-    const modalCloseBtn = document.getElementById('modal-close-btn');
-    const modalCancelBtn = document.getElementById('modal-cancel-btn');
-    const addForm = document.getElementById('add-link-form');
-    const submitBtn = document.getElementById('modal-submit-btn');
+    const addBtn = document.getElementById('open-add-website-modal-btn') || document.getElementById('open-add-link-modal-btn');
+    const modal = document.getElementById('add-website-modal') || document.getElementById('add-link-modal');
+    const modalCloseBtn = document.getElementById('close-modal-btn') || document.getElementById('modal-close-btn');
+    const modalCancelBtn = document.getElementById('cancel-modal-btn') || document.getElementById('modal-cancel-btn');
+    const addForm = document.getElementById('add-website-form') || document.getElementById('add-link-form');
+    const submitBtn = document.getElementById('submit-modal-btn') || document.getElementById('modal-submit-btn');
+    const countAllEl = document.getElementById('count-all');
+    const resetFilterBtn = document.getElementById('reset-filter-btn');
 
     if (!grid) return;
 
@@ -453,6 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
         allWebsites = fallbackWebsites;
       } finally {
         if (loadingEl) loadingEl.style.display = 'none';
+        if (countAllEl) countAllEl.textContent = allWebsites.length;
         renderCards();
       }
     }
@@ -474,7 +516,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return matchesCategory && matchesSearch;
       });
 
-      // Clear previous cards (except loading spinner and empty state elements)
+      // Clear previous cards and ensure loading spinner is hidden
+      if (loadingEl) loadingEl.style.display = 'none';
       const existingCards = grid.querySelectorAll('.website-card');
       existingCards.forEach(c => c.remove());
 
@@ -502,7 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const displayUrl = site.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
           card.innerHTML = `
-            <div class="website-card-image-wrap">
+            <div class="website-card-image-wrap" title="Click to preview full interface & download">
               <img src="${site.preview_image || './carousel/image-1.webp'}" alt="${site.title}" class="website-card-img" onerror="this.src='./carousel/image-1.webp'" />
               <div class="website-card-overlay">
                 <a href="${site.url}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm external-preview-btn">
@@ -535,6 +578,16 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           `;
 
+          // Image click opens lightbox preview
+          const imgWrap = card.querySelector('.website-card-image-wrap');
+          imgWrap.addEventListener('click', (e) => {
+            // If user clicked the "Launch Site" button inside overlay, let it navigate
+            if (e.target.closest('.external-preview-btn')) return;
+            if (window.openLandingLightbox) {
+              window.openLandingLightbox(site.preview_image || './carousel/image-1.webp', site.title, `${site.category || 'SaaS Application'} • ${site.badge || 'Live Production'}`, site.url);
+            }
+          });
+
           grid.appendChild(card);
         });
       }
@@ -563,6 +616,25 @@ document.addEventListener('DOMContentLoaded', () => {
           currentSearchQuery = e.target.value;
           renderCards();
         }, 150);
+      });
+    }
+
+    // Reset Filter Button
+    if (resetFilterBtn) {
+      resetFilterBtn.addEventListener('click', () => {
+        currentCategory = 'all';
+        currentSearchQuery = '';
+        if (searchInput) searchInput.value = '';
+        if (chipsContainer) {
+          chipsContainer.querySelectorAll('.filter-chip').forEach(c => {
+            if ((c.getAttribute('data-category') || '').toLowerCase() === 'all') {
+              c.classList.add('active');
+            } else {
+              c.classList.remove('active');
+            }
+          });
+        }
+        renderCards();
       });
     }
 
@@ -671,6 +743,89 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial load
     loadWebsites();
   }
+
+  // =========================================================================
+  // UNIVERSAL LANDING PAGE LIGHTBOX & DOWNLOAD CONTROLLER
+  // =========================================================================
+  const lightboxModal = document.getElementById('landing-lightbox-modal');
+  const lightboxImg = document.getElementById('landing-lightbox-img');
+  const lightboxTitle = document.getElementById('landing-lightbox-title');
+  const lightboxSub = document.getElementById('landing-lightbox-sub');
+  const lightboxUrl = document.getElementById('landing-lightbox-url');
+  const lightboxCloseBtn = document.getElementById('landing-lightbox-close');
+  const lightboxExternalBtn = document.getElementById('landing-lightbox-external-btn');
+  const lightboxDownloadBtn = document.getElementById('landing-lightbox-download-btn');
+
+  window.openLandingLightbox = function(src, title = 'Project Preview', sub = 'Production Asset', externalUrl = '') {
+    if (!lightboxModal || !lightboxImg) return;
+    lightboxImg.src = src;
+    if (lightboxTitle) lightboxTitle.textContent = title;
+    if (lightboxSub) lightboxSub.textContent = sub;
+    if (lightboxUrl) lightboxUrl.textContent = externalUrl || src;
+
+    if (lightboxExternalBtn) {
+      if (externalUrl && externalUrl !== '#') {
+        lightboxExternalBtn.href = externalUrl.startsWith('http') ? externalUrl : `https://${externalUrl}`;
+        lightboxExternalBtn.style.display = 'inline-flex';
+      } else {
+        lightboxExternalBtn.style.display = 'none';
+      }
+    }
+
+    const filename = src.split('/').pop().split('?')[0] || 'project-asset.webp';
+    if (lightboxDownloadBtn) {
+      lightboxDownloadBtn.onclick = async (e) => {
+        e.preventDefault();
+        await downloadBlobImage(src, filename);
+      };
+    }
+
+    lightboxModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  };
+
+  function closeLandingLightbox() {
+    if (lightboxModal) {
+      lightboxModal.classList.remove('active');
+      document.body.style.overflow = '';
+      if (lightboxImg) lightboxImg.src = '';
+    }
+  }
+
+  async function downloadBlobImage(url, filename) {
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(blobUrl);
+      document.body.removeChild(a);
+    } catch (err) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.target = '_blank';
+      a.click();
+    }
+  }
+
+  if (lightboxCloseBtn) lightboxCloseBtn.addEventListener('click', closeLandingLightbox);
+  if (lightboxModal) {
+    lightboxModal.addEventListener('click', (e) => {
+      if (e.target === lightboxModal) closeLandingLightbox();
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && lightboxModal && lightboxModal.classList.contains('active')) {
+      closeLandingLightbox();
+    }
+  });
 
   // 9. Smooth Scroll for internal navigation links
   document.querySelectorAll('a[href^="#"]').forEach(anchor => {
